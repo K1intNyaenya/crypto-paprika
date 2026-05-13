@@ -1,17 +1,39 @@
 import pandas as pd
+import psycopg2
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+from typing import Optional
 from sqlalchemy import create_engine
-from transform import transform_crypto, normalize_json
 import os
 from dotenv import load_dotenv
 
-av_url = f"postgresql+psycopg2://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require"
-engine = create_engine(av_url)
+load_dotenv()
 
-def load_to_db(df, crypto_paprika):
-    df.to_sql(crypto_paprika, 
-              engine, 
-              if_exists='replace', 
-              index=False)
-    
-    print(f"Data loaded to {crypto_paprika} table in the database.")
+POSTGRES_CONN_ID = "postgresql+psycopg2://DB_USER:DB_PASSWORD@DB_HOST:DB_PORT/DB_NAME?sslmode=require"
 
+
+def load_to_db(df: pd.DataFrame, crypto_paprika: str = "crypto_paprika") -> None:
+    """
+    Load transformed DataFrame into PostgreSQL using Airflow PostgresHook.
+    """
+    if df.empty:
+        print("Warning: DataFrame is empty. Skipping load.")
+        return
+
+    try:
+        hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        engine = hook.get_sqlalchemy_engine()
+
+        df.to_sql(
+            name=crypto_paprika,
+            con=engine,
+            if_exists='replace', 
+            index=False,
+            method='multi',
+            chunksize=1000
+        )
+
+        print(f"Successfully loaded {len(df)} records into table '{crypto_paprika}'.")
+
+    except Exception as e:
+        print(f"Error loading data to database: {e}")
+        raise
