@@ -1,27 +1,38 @@
 import pandas as pd
-import json
+from typing import List, Dict, Any
 
 
-# normalize the json data
-def normalize_json(data):
+def normalize_json(data: List[Dict[str, Any]]) -> pd.DataFrame:
+    """
+    Normalize nested JSON into a flat DataFrame.
+    """
     df = pd.json_normalize(data)
     return df
 
 
-# transform the normalized json df
-def transform_crypto(df):
+def transform_crypto(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply transformations to the cryptocurrency DataFrame.
+    """
+    df = df.copy()  # Avoid modifying original data
 
-    # removing "quotes.USD." from column names after normalization
+    # Clean column names (remove quotes.USD. prefix that comes after normalization)
     df.columns = df.columns.str.replace("quotes.USD.", "", regex=False)
 
-    # convert datetime columns
-    df["first_data_at"] = pd.to_datetime(df["first_data_at"])
-    df["last_updated"] = pd.to_datetime(df["last_updated"])
-    df["ath_date"] = pd.to_datetime(df["ath_date"])
+    # Clean datetime columns
+    datetime_cols = ["first_data_at", "last_updated", "ath_date"]
+    for col in datetime_cols:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], utc=True, errors='coerce')
 
-    # round numeric columns
-    df["price"] = df["price"].round(2)
-    df["ath_price"] = df["ath_price"].round(2)
-    df["beta_value"] = df["beta_value"].round(2)
+    # Round numeric columns
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    for col in numeric_cols:
+        if col in ["price", "ath_price", "beta_value", "volume_24h", "market_cap"]:
+            df[col] = df[col].round(4)
+        elif col in ["percent_change_1h", "percent_change_24h", "percent_change_7d"]:
+            df[col] = df[col].round(2)
+  
 
+    print(f"Transformed DataFrame shape: {df.shape}")
     return df
